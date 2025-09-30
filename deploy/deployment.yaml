@@ -14,6 +14,6 @@ spec:
     spec:
       containers:
         - name: java-app
-          image: renanafs/java-sample-app:b9fbfe48aff566689c6cef069a266e2b182235bd
+          image: renanafs/java-sample-app:c5a34c809a52894d2e00f443d6b1ac05c08fe837
           ports:
             - containerPort: 8080
