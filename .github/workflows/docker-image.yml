@@ -51,3 +51,4 @@ jobs:
           # O || true evita que o workflow falhe se não houver mudanças
           git commit -m "CI: Atualiza imagem para o SHA ${{ github.sha }}" || true
           git push
+          
