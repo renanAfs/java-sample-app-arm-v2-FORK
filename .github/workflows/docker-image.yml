@@ -1,4 +1,4 @@
-name: CI Pipeline
+name: CI Pipeline - Build and Deploy
 
 on:
   push:
@@ -6,17 +6,20 @@ on:
       - main
 
 permissions:
-  contents: write      
+  contents: write
 
 jobs:
-  build:
+  build-and-push-and-update-manifest:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout código
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
+        with:
+          # Precisamos do token para poder fazer push depois
+          token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
 
       - name: Configurar JDK 17
-        uses: actions/setup-java@v2
+        uses: actions/setup-java@v3
         with:
           java-version: '17'
           distribution: 'temurin'
@@ -25,22 +28,26 @@ jobs:
         run: mvn -B package --file pom.xml
 
       - name: Login no DockerHub
-        run: echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Build da imagem
-        run: docker build -t william201192/java-sample-app:${{ github.sha }} .
-
-      - name: Push da imagem
-        run: docker push william201192/java-sample-app:${{ github.sha }}
-
-      - name: Update k8s Manifest
-        env:
-          IMAGE_TAG: ${{ github.sha }}
-          PERSONAL_ACCESS_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+      - name: Build e Push da Imagem para DockerHub
         run: |
-          sed "s/\${IMAGE_TAG}/${IMAGE_TAG}/g" deployment-template.yaml > deploy/deployment.yaml
+          docker build -t renanafs/java-sample-app:${{ github.sha }} .
+          docker push renanafs/java-sample-app:${{ github.sha }}
+
+      - name: Atualizar o manifesto Kubernetes com a nova tag
+        run: |
+          # Substitui a tag da imagem no arquivo de deploy
+          sed -i "s|image:.*|image: renanafs/java-sample-app:${{ github.sha }}|g" deploy/deployment.yaml
+
+      - name: Fazer commit e push da atualização do manifesto
+        run: |
           git config --global user.email "actions@github.com"
           git config --global user.name "GitHub Actions"
           git add deploy/deployment.yaml
-          git commit -m "Update deployment to SHA ${IMAGE_TAG}" || echo "Sem mudanças para commit"
-          git push https://x-access-token:${{ secrets.PERSONAL_ACCESS_TOKEN }}@github.com/willtechdev/java-sample-app-arm-v2.git HEAD:main
+          # O || true evita que o workflow falhe se não houver mudanças
+          git commit -m "CI: Atualiza imagem para o SHA ${{ github.sha }}" || true
+          git push
